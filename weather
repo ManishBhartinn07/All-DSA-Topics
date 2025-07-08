@@ -1,0 +1,234 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+
+# Step 1: Ask for Location and Weather Details
+location = input("Enter the location for weather prediction: ")
+print(f"Weather prediction for {location}")
+
+# Generate Simulated Dataset for 7 Days with Hourly Data
+dates = pd.date_range(start='1/1/2025', periods=7, freq='D')
+hours = range(24)
+data = []
+for date in dates:
+    for hour in hours:
+        temp = np.random.uniform(-5, 35)  # Random temperature including cold regions
+        humidity = np.random.uniform(50, 90)  # Random humidity between 50 and 90
+        rainfall = np.random.uniform(0, 20) if np.random.random() < 0.3 else 0  # Rainfall with 30% chance
+        wind_speed = np.random.uniform(0, 20)  # Random wind speed
+        snow = np.random.uniform(0, 5) if temp < 0 else 0  # Snow if temperature is below 0
+        fog = 1 if humidity > 85 and rainfall == 0 else 0  # Foggy conditions
+        aqi = np.random.uniform(0, 300)  # Random AQI values
+        data.append([date, hour, temp, humidity, rainfall, wind_speed, snow, fog, aqi])
+
+df = pd.DataFrame(data, columns=['Date', 'Hour', 'Temperature', 'Humidity', 'Rainfall', 'Wind_Speed', 'Snow', 'Fog', 'AQI'])
+
+# Step 2: Preprocess the Data
+df['Datetime'] = pd.to_datetime(df['Date']) + pd.to_timedelta(df['Hour'], unit='h')
+df.set_index('Datetime', inplace=True)
+
+daily_data = df.groupby('Date').agg({'Temperature': 'mean', 'Humidity': 'mean', 'Rainfall': 'sum', 'Wind_Speed': 'mean', 'Snow': 'sum', 'Fog': 'sum', 'AQI': 'mean'})
+
+total_rainfall = daily_data['Rainfall'].sum()
+daily_data['Rainfall_Percentage'] = (daily_data['Rainfall'] / total_rainfall) * 100 if total_rainfall > 0 else 0
+
+# Add Weather Conditions
+def weather_condition(row):
+    if row['Rainfall'] > 5:
+        return 'Rainy'
+    elif row['Snow'] > 0:
+        return 'Snowy'
+    elif row['Fog'] > 0:
+        return 'Foggy'
+    elif row['Wind_Speed'] > 10:
+        return 'Windy'
+    else:
+        return 'Sunny'
+
+df['Condition'] = df.apply(weather_condition, axis=1)
+
+# Categorize AQI
+def aqi_category(aqi):
+    if aqi <= 50:
+        return 'Good'
+    elif aqi <= 100:
+        return 'Moderate'
+    elif aqi <= 150:
+        return 'Unhealthy for Sensitive Groups'
+    elif aqi <= 200:
+        return 'Unhealthy'
+    elif aqi <= 300:
+        return 'Very Unhealthy'
+    else:
+        return 'Hazardous'
+
+df['AQI_Category'] = df['AQI'].apply(aqi_category)
+
+# Calculate Percentages
+conditions = df['Condition'].value_counts(normalize=True) * 100
+rain_percentage = conditions.get('Rainy', 0)
+sunny_percentage = conditions.get('Sunny', 0)
+foggy_percentage = conditions.get('Foggy', 0)
+windy_percentage = conditions.get('Windy', 0)
+snow_percentage = conditions.get('Snowy', 0)
+
+# Print Summary
+print("\nWeather Summary:")
+print(f"Rainy: {rain_percentage:.2f}%")
+print(f"Sunny: {sunny_percentage:.2f}%")
+print(f"Foggy: {foggy_percentage:.2f}%")
+print(f"Windy: {windy_percentage:.2f}%")
+print(f"Snowy: {snow_percentage:.2f}%")
+
+# AQI Summary
+aqi_categories = df['AQI_Category'].value_counts()
+print("\nAQI Summary:")
+for category, count in aqi_categories.items():
+    print(f"{category}: {count} hours")
+
+# Step 3: Visualize the Results
+# Daily Rainfall Visualization
+def visualize_daily_rainfall():
+    plt.figure(figsize=(12, 6))
+    plt.bar(daily_data.index, daily_data['Rainfall_Percentage'], label='Total Daily Rainfall (%)', color='blue', alpha=0.6)
+    plt.title(f'Total Daily Rainfall Over 7 Days for {location}')
+    plt.xlabel('Date')
+    plt.ylabel('Rainfall (%)')
+    plt.xticks(rotation=45)
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+# Hourly Rainfall Visualization
+def visualize_hourly_rainfall():
+    plt.figure(figsize=(15, 6))
+    plt.plot(df.index, df['Rainfall'], label='Hourly Rainfall', color='blue', alpha=0.6, linewidth=1)
+    plt.title(f'Hourly Rainfall Over 7 Days for {location}')
+    plt.xlabel('Datetime')
+    plt.ylabel('Rainfall (mm)')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+# Weather Condition Visualization
+def visualize_weather_conditions():
+    plt.figure(figsize=(10, 6))
+    conditions.plot(kind='bar', color=['blue', 'yellow', 'gray', 'orange', 'white'], alpha=0.8)
+    plt.title(f'Weather Conditions Percentage for {location}')
+    plt.ylabel('Percentage')
+    plt.xlabel('Condition')
+    plt.tight_layout()
+    plt.show()
+
+# AQI Visualization
+def visualize_aqi():
+    plt.figure(figsize=(10, 6))
+    df['AQI'].plot(kind='line', color='green', alpha=0.8, label='Hourly AQI')
+    plt.title(f'Hourly AQI Levels Over 7 Days for {location}')
+    plt.xlabel('Datetime')
+    plt.ylabel('AQI')
+    plt.axhline(50, color='blue', linestyle='--', label='Good')
+    plt.axhline(100, color='yellow', linestyle='--', label='Moderate')
+    plt.axhline(150, color='orange', linestyle='--', label='Unhealthy for Sensitive Groups')
+    plt.axhline(200, color='red', linestyle='--', label='Unhealthy')
+    plt.axhline(300, color='purple', linestyle='--', label='Very Unhealthy')
+    plt.legend()
+    plt.tight_layout()
+    plt.show()
+
+# Hourly Breakdown in Table Format
+hourly_summary = df[['Date', 'Hour', 'Temperature', 'Condition', 'AQI', 'AQI_Category']]
+print("\nHourly Weather Breakdown:")
+print(hourly_summary.head(20))
+
+# Alerts
+print("\nWeather Alerts:")
+alerts = []
+if rain_percentage > 50:
+    alerts.append("High chance of rain. Carry an umbrella!")
+if snow_percentage > 20:
+    alerts.append("Snowy conditions expected. Drive safely!")
+if windy_percentage > 30:
+    alerts.append("Windy conditions forecasted. Secure outdoor items!")
+if foggy_percentage > 20:
+    alerts.append("Foggy weather expected. Use caution while driving!")
+
+# AQI Alerts
+if (df['AQI'] > 150).mean() > 0.3:
+    alerts.append("Prolonged unhealthy air quality detected. Limit outdoor activities!")
+
+if alerts:
+    for alert in alerts:
+        print(alert)
+
+# Visualization Selection
+print("\nSelect the type of visualization:")
+print("1. Daily Rainfall")
+print("2. Hourly Rainfall")
+print("3. Weather Condition Percentages")
+print("4. AQI Levels")
+print("5. All Visualizations")
+choice = int(input("Enter your choice (1-5): "))
+
+if choice == 1:
+    visualize_daily_rainfall()
+elif choice == 2:
+    visualize_hourly_rainfall()
+elif choice == 3:
+    visualize_weather_conditions()
+elif choice == 4:
+    visualize_aqi()
+elif choice == 5:
+    visualize_daily_rainfall()
+    visualize_hourly_rainfall()
+    visualize_weather_conditions()
+    visualize_aqi()
+else:
+    print("Invalid choice. No visualization displayed.")
+
+# Ask for a specific day to view hourly predictions
+print("\nDo you want to view hourly predictions for a specific day?")
+view_day = input("Enter 'yes' to proceed or 'no' to skip: ").strip().lower()
+
+if view_day == 'yes':
+    available_dates = hourly_summary['Date'].unique()
+    print("\nAvailable Dates:")
+    for i, date in enumerate(available_dates, 1):
+        print(f"{i}. {date}")
+
+    # Ask the user to select a date
+    selected_day = int(input("\nEnter the number corresponding to the day you want to view (1-7): "))
+
+    if 1 <= selected_day <= len(available_dates):
+        chosen_date = available_dates[selected_day - 1]
+        hourly_prediction = hourly_summary[hourly_summary['Date'] == chosen_date]
+
+        print(f"\nHourly Weather Prediction for {chosen_date}:")
+        print(hourly_prediction)
+
+        # Optional: Visualize hourly temperature for the chosen day
+        plt.figure(figsize=(12, 6))
+        plt.plot(hourly_prediction['Hour'], hourly_prediction['Temperature'], label='Temperature (°C)', color='red', marker='o')
+        plt.title(f'Hourly Temperature for {chosen_date}')
+        plt.xlabel('Hour')
+        plt.ylabel('Temperature (°C)')
+        plt.grid(True)
+        plt.legend()
+        plt.tight_layout()
+        plt.show()
+    else:
+        print("Invalid choice. No hourly predictions displayed.")
+else:
+    print("Skipping hourly predictions for a specific day.")
+
+# Export Summary to CSV
+hourly_summary.to_csv(f'{location}_hourly_weather_breakdown.csv', index=False)
+print("\nHourly weather breakdown saved to CSV file.")
+
+print("\nWeather prediction and visualization complete!")
