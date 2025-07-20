@@ -54,8 +54,15 @@
 
 # print(sum)
 
-a="kvbd"
+# a="kvbd"
 # l=["k","v","b","d"]
-l=list(a)
-l.sort()
-print(l)
+# l=list(a)
+# l.sort()
+# print(l)
+
+a=3
+print(ord(str(3)))
+print(bin(a)[2:])
+print(list(bin(a)[2:]))
+print(bin(1) and bin(4))
+
